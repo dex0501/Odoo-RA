@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Odoo Planning Dashboard</title>
+  <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #f5f6fa;
+      color: #2d2d2d;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ── */
+    .sidebar {
+      width: 270px;
+      min-width: 270px;
+      background: #fff;
+      border-right: 1px solid #e8e8e8;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      overflow-y: auto;
+    }
+
+    .sidebar-header {
+      background: #875a7b;
+      color: #fff;
+      padding: 20px 18px 16px;
+      flex-shrink: 0;
+    }
+    .sidebar-header h1 { font-size: 17px; font-weight: 700; margin-bottom: 3px; }
+    .sidebar-header p  { font-size: 12px; opacity: 0.82; }
+
+    .filters { padding: 16px 18px; flex: 1; }
+    .filters > h2 {
+      font-size: 11px; font-weight: 700; color: #875a7b;
+      text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 14px;
+    }
+
+    .filter-group { margin-bottom: 18px; }
+    .filter-group > .filter-label {
+      display: block; font-size: 11px; font-weight: 600; color: #666;
+      text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 6px;
+    }
+
+    .date-row { display: flex; gap: 6px; }
+    .date-row input[type="date"] {
+      flex: 1; padding: 6px 8px; border: 1px solid #ddd; border-radius: 5px;
+      font-size: 12px; color: #333; outline: none; background: #fff;
+    }
+    .date-row input[type="date"]:focus { border-color: #875a7b; }
+
+    .select-all-row {
+      display: flex; justify-content: flex-end; gap: 8px; margin-bottom: 5px;
+    }
+    .select-all-row button {
+      font-size: 11px; color: #875a7b; background: none; border: none;
+      cursor: pointer; text-decoration: underline; padding: 0;
+    }
+
+    .checkbox-list {
+      max-height: 120px; overflow-y: auto; border: 1px solid #eee;
+      border-radius: 5px; padding: 5px 8px;
+    }
+    .checkbox-list label {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12px; color: #444; padding: 3px 0; cursor: pointer;
+      white-space: nowrap;
+    }
+    .checkbox-list input[type="checkbox"] { accent-color: #875a7b; flex-shrink: 0; }
+
+    .radio-group label {
+      display: flex; align-items: center; gap: 7px;
+      font-size: 12px; color: #444; padding: 3px 0; cursor: pointer;
+    }
+    .radio-group input[type="radio"] { accent-color: #875a7b; }
+
+    .sidebar-footer {
+      padding: 14px 18px;
+      border-top: 1px solid #f0f0f0;
+      flex-shrink: 0;
+    }
+    .btn-reset {
+      width: 100%; padding: 9px; background: #875a7b; color: #fff;
+      border: none; border-radius: 6px; font-size: 13px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s;
+    }
+    .btn-reset:hover { background: #6d4764; }
+
+    /* ── Main content ── */
+    .main {
+      flex: 1; overflow-y: auto; height: 100vh; padding: 24px 28px;
+    }
+
+    .page-header { margin-bottom: 22px; }
+    .page-header h1 { font-size: 24px; font-weight: 700; color: #1a1a2e; margin-bottom: 3px; }
+    .page-header p  { font-size: 13px; color: #999; }
+
+    /* ── Metrics ── */
+    .metrics {
+      display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px;
+      margin-bottom: 22px;
+    }
+    .metric-card {
+      background: #fff; border-radius: 10px; padding: 16px 18px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); border-left: 4px solid #875a7b;
+    }
+    .metric-value {
+      font-size: 26px; font-weight: 700; color: #875a7b; line-height: 1; margin-bottom: 5px;
+    }
+    .metric-label {
+      font-size: 11px; color: #999; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.4px;
+    }
+
+    /* ── Sections ── */
+    .section {
+      background: #fff; border-radius: 10px; padding: 20px 22px;
+      box-shadow: 0 1px 4px rgba(0,0,0,.07); margin-bottom: 20px;
+    }
+    .section-title {
+      font-size: 16px; font-weight: 700; color: #1a1a2e; margin-bottom: 2px;
+    }
+    .notice {
+      font-size: 12px; color: #aaa; margin-bottom: 8px; min-height: 16px;
+    }
+
+    /* ── Tabs ── */
+    .tabs {
+      display: flex; border-bottom: 2px solid #f0f0f0; margin: 14px 0 0;
+    }
+    .tab-btn {
+      padding: 7px 18px; background: none; border: none;
+      border-bottom: 2px solid transparent; margin-bottom: -2px;
+      font-size: 13px; font-weight: 500; color: #aaa; cursor: pointer; transition: all .15s;
+    }
+    .tab-btn.active { color: #875a7b; border-bottom-color: #875a7b; }
+    .tab-content { display: none; padding-top: 14px; }
+    .tab-content.active { display: block; }
+
+    /* ── Utilization table ── */
+    .util-table {
+      width: 100%; border-collapse: collapse; font-size: 13px;
+    }
+    .util-table th {
+      text-align: left; padding: 8px 12px; font-size: 11px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.4px; color: #aaa;
+      border-bottom: 2px solid #f0f0f0;
+    }
+    .util-table td {
+      padding: 10px 12px; border-bottom: 1px solid #f7f7f7; color: #444;
+    }
+    .util-table tbody tr:hover td { background: #fdf8fc; }
+
+    .badge {
+      display: inline-block; padding: 2px 9px; border-radius: 12px;
+      font-size: 11px; font-weight: 600;
+    }
+    .badge-Engineering { background: #e3f2fd; color: #1565c0; }
+    .badge-Design      { background: #fce4ec; color: #c62828; }
+    .badge-Management  { background: #f3e5f5; color: #6a1b9a; }
+    .badge-QA          { background: #e8f5e9; color: #2e7d32; }
+
+    .no-data {
+      text-align: center; padding: 48px 0; color: #ccc; font-size: 15px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ══ Sidebar ══════════════════════════════════════════════════════════════ -->
+<aside class="sidebar">
+  <div class="sidebar-header">
+    <h1>📅 Odoo Planning</h1>
+    <p>Resource Allocation Dashboard</p>
+  </div>
+
+  <div class="filters">
+    <h2>Filters</h2>
+
+    <div class="filter-group">
+      <span class="filter-label">Date Range</span>
+      <div class="date-row">
+        <input type="date" id="date-start">
+        <input type="date" id="date-end">
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Resources</span>
+      <div class="select-all-row">
+        <button onclick="selectAll('resources')">All</button>
+        <button onclick="selectNone('resources')">None</button>
+      </div>
+      <div class="checkbox-list" id="filter-resources"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Projects</span>
+      <div class="select-all-row">
+        <button onclick="selectAll('projects')">All</button>
+        <button onclick="selectNone('projects')">None</button>
+      </div>
+      <div class="checkbox-list" id="filter-projects"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Roles</span>
+      <div class="select-all-row">
+        <button onclick="selectAll('roles')">All</button>
+        <button onclick="selectNone('roles')">None</button>
+      </div>
+      <div class="checkbox-list" id="filter-roles"></div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">State</span>
+      <div class="checkbox-list" id="filter-states">
+        <label><input type="checkbox" value="published" checked onchange="render()"> Published</label>
+        <label><input type="checkbox" value="draft"     checked onchange="render()"> Draft (faded bars)</label>
+      </div>
+    </div>
+
+    <div class="filter-group">
+      <span class="filter-label">Color Gantt by</span>
+      <div class="radio-group">
+        <label><input type="radio" name="color-by" value="project_name" checked onchange="render()"> Project</label>
+        <label><input type="radio" name="color-by" value="role_name"            onchange="render()"> Role</label>
+      </div>
+    </div>
+  </div>
+
+  <div class="sidebar-footer">
+    <button class="btn-reset" onclick="resetFilters()">Reset Filters</button>
+  </div>
+</aside>
+
+<!-- ══ Main ════════════════════════════════════════════════════════════════ -->
+<main class="main">
+  <div class="page-header">
+    <h1>Odoo Planning Dashboard</h1>
+    <p>Visualizing resource allocation from the Odoo Planning module &nbsp;·&nbsp; Demo data</p>
+  </div>
+
+  <div class="metrics">
+    <div class="metric-card"><div class="metric-value" id="m-slots">—</div><div class="metric-label">Total Slots</div></div>
+    <div class="metric-card"><div class="metric-value" id="m-resources">—</div><div class="metric-label">Resources</div></div>
+    <div class="metric-card"><div class="metric-value" id="m-avg-pct">—</div><div class="metric-label">Avg Allocation %</div></div>
+    <div class="metric-card"><div class="metric-value" id="m-span">—</div><div class="metric-label">Date Span</div></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Resource Allocation Timeline</div>
+    <div class="notice" id="draft-notice"></div>
+    <div id="gantt-chart"></div>
+  </div>
+
+  <div class="section">
+    <div class="section-title">Resource Utilization</div>
+    <div class="tabs">
+      <button class="tab-btn active" onclick="switchTab('chart', this)">Chart</button>
+      <button class="tab-btn"        onclick="switchTab('table', this)">Table</button>
+    </div>
+    <div class="tab-content active" id="tab-chart">
+      <div id="util-chart"></div>
+    </div>
+    <div class="tab-content" id="tab-table">
+      <div id="util-table-wrap"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+// ── Seeded RNG (Mulberry32) ────────────────────────────────────────────────────
+function mulberry32(seed) {
+  return function () {
+    seed |= 0; seed = seed + 0x6D2B79F5 | 0;
+    let t = Math.imul(seed ^ seed >>> 15, 1 | seed);
+    t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+    return ((t ^ t >>> 14) >>> 0) / 4294967296;
+  };
+}
+
+// ── Reference data ────────────────────────────────────────────────────────────
+const EMPLOYEES = [
+  { name: 'Alice Martin',  department: 'Engineering' },
+  { name: 'Bob Chen',      department: 'Engineering' },
+  { name: 'Carol Davis',   department: 'Design'      },
+  { name: 'Dan Kim',       department: 'Engineering' },
+  { name: 'Eva Rodriguez', department: 'Design'      },
+  { name: 'Frank Schmidt', department: 'Management'  },
+  { name: 'Grace Nguyen',  department: 'Engineering' },
+  { name: 'Hugo Petrov',   department: 'QA'          },
+  { name: 'Iris Tanaka',   department: 'Management'  },
+  { name: 'Jake Osei',     department: 'QA'          },
+];
+const PROJECTS = ['ERP Migration', 'Mobile App', 'Data Warehouse', 'CRM Revamp', 'Security Audit'];
+const ROLES    = ['Developer', 'Designer', 'Manager', 'QA Engineer'];
+
+// ── Mock data generation ──────────────────────────────────────────────────────
+function addDays(date, n) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + n);
+  return d;
+}
+
+function generateSlots(n = 80, seed = 42) {
+  const rand = mulberry32(seed);
+  const pick  = arr => arr[Math.floor(rand() * arr.length)];
+  const wpick = (items, w) => {
+    const tot = w.reduce((a, b) => a + b, 0);
+    let r = rand() * tot;
+    for (let i = 0; i < items.length; i++) { r -= w[i]; if (r <= 0) return items[i]; }
+    return items[items.length - 1];
+  };
+
+  const BASE = new Date('2025-04-01');
+  const slots = [];
+  for (let i = 1; i <= n; i++) {
+    const emp      = pick(EMPLOYEES);
+    const project  = pick(PROJECTS);
+    const role     = pick(ROLES);
+    const state    = rand() < 0.3 ? 'draft' : 'published';
+    const duration = wpick([1, 2, 3, 5, 10], [30, 30, 20, 15, 5]);
+    const offset   = Math.floor(rand() * 56);
+    const start    = addDays(BASE, offset);
+    const end      = addDays(start, duration);
+    slots.push({
+      id: i,
+      resource_name:        emp.name,
+      department:           emp.department,
+      role_name:            role,
+      project_name:         project,
+      start_datetime:       start,
+      end_datetime:         end,
+      allocated_hours:      duration * 8,
+      allocated_percentage: pick([25, 50, 75, 100]),
+      state,
+    });
+  }
+  return slots;
+}
+
+const ALL_SLOTS = generateSlots(80, 42);
+
+// ── Color palettes ────────────────────────────────────────────────────────────
+const PALETTE = ['#66c2a5','#fc8d62','#8da0cb','#e78ac3','#a6d854','#ffd92f','#e5c494','#b3b3b3'];
+const DEPT_COLOR = { Engineering: '#8da0cb', Design: '#fc8d62', Management: '#66c2a5', QA: '#e78ac3' };
+
+// ── Derived constants ─────────────────────────────────────────────────────────
+const allResources = [...new Set(ALL_SLOTS.map(s => s.resource_name))].sort();
+const allProjects  = [...new Set(ALL_SLOTS.map(s => s.project_name))].sort();
+const allRoles     = [...new Set(ALL_SLOTS.map(s => s.role_name))].sort();
+const allDates     = ALL_SLOTS.flatMap(s => [+s.start_datetime, +s.end_datetime]);
+const minDate      = new Date(Math.min(...allDates));
+const maxDate      = new Date(Math.max(...allDates));
+
+const toInputDate = d => d.toISOString().slice(0, 10);
+
+// ── Build sidebar checkboxes ──────────────────────────────────────────────────
+function buildCheckboxes(id, items) {
+  document.getElementById(id).innerHTML = items.map(v =>
+    `<label><input type="checkbox" value="${v}" checked onchange="render()"> ${v}</label>`
+  ).join('');
+}
+buildCheckboxes('filter-resources', allResources);
+buildCheckboxes('filter-projects',  allProjects);
+buildCheckboxes('filter-roles',     allRoles);
+
+const elStart = document.getElementById('date-start');
+const elEnd   = document.getElementById('date-end');
+elStart.value = toInputDate(minDate);
+elEnd.value   = toInputDate(maxDate);
+elStart.addEventListener('change', render);
+elEnd.addEventListener('change', render);
+
+// ── Filter helpers ────────────────────────────────────────────────────────────
+const getChecked = id =>
+  [...document.querySelectorAll(`#${id} input:checked`)].map(cb => cb.value);
+
+function selectAll(key)  {
+  document.querySelectorAll(`#filter-${key} input`).forEach(cb => cb.checked = true);
+  render();
+}
+function selectNone(key) {
+  document.querySelectorAll(`#filter-${key} input`).forEach(cb => cb.checked = false);
+  render();
+}
+
+function resetFilters() {
+  elStart.value = toInputDate(minDate);
+  elEnd.value   = toInputDate(maxDate);
+  ['resources','projects','roles','states'].forEach(k =>
+    document.querySelectorAll(`#filter-${k} input`).forEach(cb => cb.checked = true)
+  );
+  document.querySelector('input[name="color-by"][value="project_name"]').checked = true;
+  render();
+}
+
+// ── Filtering ─────────────────────────────────────────────────────────────────
+function filterSlots() {
+  const start = new Date(elStart.value);
+  const end   = addDays(new Date(elEnd.value), 1); // inclusive end
+
+  const res    = new Set(getChecked('filter-resources'));
+  const proj   = new Set(getChecked('filter-projects'));
+  const role   = new Set(getChecked('filter-roles'));
+  const states = new Set(getChecked('filter-states'));
+
+  return ALL_SLOTS.filter(s =>
+    s.start_datetime < end   &&
+    s.end_datetime   > start &&
+    (res.size   === 0 || res.has(s.resource_name)) &&
+    (proj.size  === 0 || proj.has(s.project_name)) &&
+    (role.size  === 0 || role.has(s.role_name))    &&
+    states.has(s.state)
+  );
+}
+
+// ── Metrics ───────────────────────────────────────────────────────────────────
+function renderMetrics(filtered) {
+  const n    = filtered.length;
+  const nRes = new Set(filtered.map(s => s.resource_name)).size;
+  const avgP = n
+    ? (filtered.reduce((a, s) => a + s.allocated_percentage, 0) / n).toFixed(1) + '%'
+    : '0.0%';
+  let span = '—';
+  if (n) {
+    const ms = Math.max(...filtered.map(s => +s.end_datetime)) -
+               Math.min(...filtered.map(s => +s.start_datetime));
+    span = Math.round(ms / 86400000) + 'd';
+  }
+  document.getElementById('m-slots').textContent     = n;
+  document.getElementById('m-resources').textContent = nRes;
+  document.getElementById('m-avg-pct').textContent   = avgP;
+  document.getElementById('m-span').textContent      = span;
+}
+
+// ── Gantt chart ───────────────────────────────────────────────────────────────
+function renderGantt(filtered) {
+  const colorBy = document.querySelector('input[name="color-by"]:checked').value;
+  const groups  = [...new Set(ALL_SLOTS.map(s => s[colorBy]))].sort();
+
+  const draftN = filtered.filter(s => s.state === 'draft').length;
+  document.getElementById('draft-notice').textContent =
+    draftN ? `Faded bars = draft  (${draftN} slot${draftN !== 1 ? 's' : ''})` : '';
+
+  if (!filtered.length) {
+    Plotly.react('gantt-chart', [], {
+      annotations: [{ text: 'No slots match the current filters.',
+        xref:'paper', yref:'paper', x:.5, y:.5, showarrow:false,
+        font:{ size:16, color:'#ccc' } }],
+      height: 360, plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+      margin:{ l:20, r:20, t:20, b:20 },
+    }, { responsive:true, displayModeBar:false });
+    return;
+  }
+
+  const resources = [...new Set(filtered.map(s => s.resource_name))].sort();
+
+  const traces = groups.flatMap((group, gi) => {
+    const rows = filtered.filter(s => s[colorBy] === group);
+    if (!rows.length) return [];
+    return [{
+      type: 'bar',
+      orientation: 'h',
+      name: group,
+      x:    rows.map(s => +s.end_datetime - +s.start_datetime),
+      y:    rows.map(s => s.resource_name),
+      base: rows.map(s => +s.start_datetime),
+      marker: {
+        color:   PALETTE[gi % PALETTE.length],
+        opacity: rows.map(s => s.state === 'draft' ? 0.35 : 0.88),
+        line:    { width: 0.5, color: 'rgba(255,255,255,0.4)' },
+      },
+      customdata: rows.map(s => [
+        s.end_datetime.toLocaleDateString('en-US',{ month:'short', day:'numeric', year:'numeric' }),
+        s.allocated_hours,
+        s.allocated_percentage,
+        s.state,
+        s.role_name,
+        s.project_name,
+      ]),
+      hovertemplate:
+        '<b>%{y}</b><br>' +
+        'Project: %{customdata[5]}<br>Role: %{customdata[4]}<br>' +
+        'End: %{customdata[0]}<br>' +
+        'Hours: %{customdata[1]:.0f}h &nbsp;·&nbsp; Alloc: %{customdata[2]:.0f}%<br>' +
+        'State: %{customdata[3]}<extra></extra>',
+    }];
+  });
+
+  const layout = {
+    barmode: 'overlay',
+    height:  Math.max(380, resources.length * 54 + 130),
+    xaxis: { type:'date', tickformat:'%b %d', showgrid:true, gridcolor:'#ebebeb', title:'' },
+    yaxis: {
+      autorange:'reversed',
+      categoryorder:'array',
+      categoryarray:[...resources].reverse(),
+      title:'',
+    },
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+    margin:{ l:140, r:20, t:40, b:50 },
+    legend:{ orientation:'h', y:1.06, x:0, xanchor:'left', font:{ size:12 } },
+    bargap: 0.28,
+    hovermode:'closest',
+  };
+
+  Plotly.react('gantt-chart', traces, layout, { responsive:true, displayModeBar:false });
+}
+
+// ── Resource utilization aggregation ─────────────────────────────────────────
+function aggregate(filtered) {
+  const map = {};
+  filtered.forEach(s => {
+    if (!map[s.resource_name]) map[s.resource_name] = {
+      resource_name: s.resource_name, department: s.department,
+      slots: 0, hours: 0, pctSum: 0, projects: new Set(),
+    };
+    const r = map[s.resource_name];
+    r.slots++; r.hours += s.allocated_hours; r.pctSum += s.allocated_percentage;
+    r.projects.add(s.project_name);
+  });
+  return Object.values(map)
+    .map(r => ({ ...r, avgPct: r.pctSum / r.slots, projectCount: r.projects.size }))
+    .sort((a, b) => b.hours - a.hours);
+}
+
+// ── Utilization bar chart ─────────────────────────────────────────────────────
+function renderUtilChart(resources) {
+  if (!resources.length) {
+    Plotly.react('util-chart', [], {
+      annotations: [{ text:'No data.', xref:'paper', yref:'paper', x:.5, y:.5,
+        showarrow:false, font:{ size:14, color:'#ccc' } }],
+      height:280, plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+      margin:{ l:20, r:20, t:10, b:20 },
+    }, { responsive:true, displayModeBar:false });
+    return;
+  }
+
+  const sorted = [...resources].sort((a, b) => a.hours - b.hours);
+  const depts  = [...new Set(sorted.map(r => r.department))].sort();
+
+  const traces = depts.map(dept => {
+    const rows = sorted.filter(r => r.department === dept);
+    return {
+      type: 'bar', orientation: 'h', name: dept,
+      x: rows.map(r => r.hours),
+      y: rows.map(r => r.resource_name),
+      text: rows.map(r => r.hours.toFixed(0) + 'h'),
+      textposition: 'outside',
+      marker: { color: DEPT_COLOR[dept] || '#aaa' },
+      hovertemplate: '<b>%{y}</b> · %{x:.0f}h<extra></extra>',
+    };
+  });
+
+  Plotly.react('util-chart', traces, {
+    barmode: 'overlay',
+    height:  Math.max(280, sorted.length * 40 + 100),
+    xaxis: { title:'Total Allocated Hours', showgrid:true, gridcolor:'#ebebeb' },
+    yaxis: { title:'', autorange:true },
+    plot_bgcolor:'#fff', paper_bgcolor:'#fff',
+    margin:{ l:140, r:90, t:20, b:50 },
+    legend:{ orientation:'h', y:1.06, font:{ size:12 } },
+  }, { responsive:true, displayModeBar:false });
+}
+
+// ── Utilization table ─────────────────────────────────────────────────────────
+function renderUtilTable(resources) {
+  const wrap = document.getElementById('util-table-wrap');
+  if (!resources.length) {
+    wrap.innerHTML = '<div class="no-data">No data matches the current filters.</div>';
+    return;
+  }
+  const rows = resources.map(r => `
+    <tr>
+      <td>${r.resource_name}</td>
+      <td><span class="badge badge-${r.department}">${r.department}</span></td>
+      <td>${r.slots}</td>
+      <td>${r.hours.toFixed(1)}h</td>
+      <td>${r.avgPct.toFixed(1)}%</td>
+      <td>${r.projectCount}</td>
+    </tr>`).join('');
+  wrap.innerHTML = `
+    <table class="util-table">
+      <thead>
+        <tr>
+          <th>Employee</th><th>Department</th><th>Slots</th>
+          <th>Total Hours</th><th>Avg %</th><th>Projects</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// ── Tab switching ─────────────────────────────────────────────────────────────
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'chart') Plotly.Plots.resize('util-chart');
+}
+
+// ── Main render ───────────────────────────────────────────────────────────────
+function render() {
+  const filtered  = filterSlots();
+  const resources = aggregate(filtered);
+  renderMetrics(filtered);
+  renderGantt(filtered);
+  renderUtilChart(resources);
+  renderUtilTable(resources);
+}
+
+render();
+</script>
+</body>
+</html>
